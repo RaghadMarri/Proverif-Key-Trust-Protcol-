@@ -1,0 +1,228 @@
+set attacker = active.
+
+set ignoreTypes = false.
+(* set privateCommOnPublicTerms = true. *)
+(* set preciseActions = trueWithoutArgsInNames. *)
+(* set movenew = true. *)
+
+set simplifyDerivation = true.
+set abbreviateDerivation = true.
+set reconstructTrace = true.
+set traceBacktracking = true.
+
+(* set verboseClauses = explained.
+set abbreviateClauses = true.
+set removeUselessClausesBeforeDisplay = true.
+set verboseTerm = true.
+set verboseRules = true. *)
+
+type spkey.
+type ppkey.
+type sig.
+type auth.
+
+const Bob_gbs_auth:auth.
+const Bob_gbe1_auth:auth.
+const Alice_gae0_auth:auth.
+const Alice_gae1_auth:auth.
+const Alice_gae2_auth:auth.
+const Alice_e1_auth:auth.
+const Bob_e2_auth:auth.
+const Alice_e3_auth:auth.
+
+const const_g:ppkey.
+const const_nil:bitstring.
+const const_whispertext:bitstring.
+const const_whisperratchet:bitstring.
+const const_whispermessagekeys:bitstring.
+const const_message_key_seed:bitstring.
+const const_alongterm:spkey [private].
+const const_blongterm:spkey [private].
+const const_bs:spkey [private].
+const const_bob_name:bitstring [private].
+const const_ad:bitstring [private].
+
+const pub:channel.
+const chan_Alice_to_Bob:channel.
+const chan_Alice_to_Bob_private:channel [private].
+const chan_Bob_to_Alice:channel.
+const chan_Bob_to_Alice_private:channel [private].
+
+event SendPpkey(ppkey, ppkey, auth).
+event SendBitstring(ppkey, bitstring, auth).
+event RecvPpkey(ppkey, ppkey, auth).
+event RecvBitstring(ppkey, bitstring, auth).
+event Failed().
+event AliceDone().
+event BobDone().
+
+fun PPKEY2BITSTRING(ppkey):bitstring [typeConverter]. 
+fun CONCAT2(bitstring, bitstring):bitstring [data].
+fun SPLIT2(bitstring):bitstring
+	reduc forall a:bitstring, b:bitstring;
+	SPLIT2(CONCAT2(a, b)) = (a, b).
+fun CONCAT4(ppkey, ppkey, ppkey, ppkey):bitstring [data].
+fun exp(spkey, ppkey):ppkey.
+equation forall a:spkey, b:spkey;
+	exp(b, exp(a, const_g)) = exp(a, exp(b, const_g)).
+fun MAC(bitstring, bitstring): bitstring.
+fun hmac_hash1(bitstring, bitstring, bitstring):bitstring.
+fun hmac_hash2(bitstring, bitstring, bitstring):bitstring.
+letfun HKDF(salt:bitstring, ikm:bitstring, info:bitstring) =
+	let output1 = hmac_hash1(salt, ikm, info) in
+	let output2 = hmac_hash2(salt, ikm, info) in
+	(output1, output2).
+fun AEAD_ENC(bitstring, bitstring, bitstring):bitstring.
+fun AEAD_DEC(bitstring, bitstring, bitstring):bitstring
+    reduc forall k:bitstring, m:bitstring, ad:bitstring;
+	AEAD_DEC(k, AEAD_ENC(k, m, ad), ad) = m
+	otherwise forall k:bitstring, m:bitstring, ad:bitstring;
+	AEAD_DEC(k, m, ad) = const_nil.
+fun AEAD_DEC_check(bitstring, bitstring, bitstring):bool
+    reduc forall k:bitstring, m:bitstring, ad:bitstring;
+	AEAD_DEC_check(k, AEAD_ENC(k, m, ad), ad) = true
+	otherwise forall k:bitstring, m:bitstring, ad:bitstring;
+	AEAD_DEC_check(k, m, ad) = false.
+fun SIGN(spkey, ppkey):sig.
+fun SIGNVERIF(ppkey, sig, ppkey):bool
+    reduc forall sk:spkey, m:ppkey;
+	SIGNVERIF(exp(sk, const_g), SIGN(sk, m), m) = true
+	otherwise forall pk:ppkey, s:sig, m:ppkey;
+	SIGNVERIF(pk, s, m) = false.
+
+query attacker(const_bob_name).
+(* query x:ppkey, y:ppkey; event(RecvPpkey(x, y, Bob_gbs_auth)) ==> event(SendPpkey(x, y, Bob_gbs_auth)). *)
+(* query x:ppkey, y:ppkey; event(RecvPpkey(x, y, Bob_gbe1_auth)) ==> event(SendPpkey(x, y, Bob_gbe1_auth)). *)
+(* query x:ppkey, y:ppkey; event(RecvPpkey(x, y, Alice_gae0_auth)) ==> event(SendPpkey(x, y, Alice_gae0_auth)). *)
+(* query x:ppkey, y:ppkey; event(RecvPpkey(x, y, Alice_gae1_auth)) ==> event(SendPpkey(x, y, Alice_gae1_auth)). *)
+(* query x:ppkey, y:ppkey; event(RecvPpkey(x, y, Alice_gae2_auth)) ==> event(SendPpkey(x, y, Alice_gae2_auth)). *)
+(* query x:ppkey, y:bitstring; event(RecvBitstring(x, y, Alice_e1_auth)) ==> event(SendBitstring(x, y, Alice_e1_auth)). *)
+(* query x:ppkey, y:bitstring; event(RecvBitstring(x, y, Bob_e2_auth)) ==> event(SendBitstring(x, y, Bob_e2_auth)). *)
+(* query x:ppkey, y:bitstring; event(RecvBitstring(x, y, Alice_e3_auth)) ==> event(SendBitstring(x, y, Alice_e3_auth)). *)
+(* query event(AliceDone()). *)
+(* query event(BobDone()). *)
+
+let leaked3(x1:spkey, x2:bitstring, x3:bitstring, x4:bitstring, x5:bitstring, x6:bitstring) = 
+	out(pub, const_ad);
+	out(pub, x1);
+	out(pub, x2);
+	out(pub, x3);
+	out(pub, x4);
+	out(pub, x5);
+	out(pub, x6);
+    0.
+
+let Alice() =
+    new const_ae0:spkey;
+	new const_ae1:spkey;
+	new const_ae2:spkey;
+	new const_ak1:bitstring;
+	let (Bob_gblongterm:ppkey) = exp(const_blongterm, const_g) in (* A work around Signal out-of-band authentication *)
+	in(chan_Bob_to_Alice, (Bob_gbs:ppkey));
+	in(chan_Bob_to_Alice, (Bob_gbo:ppkey));
+	in(chan_Bob_to_Alice, (Bob_gbssig:sig));
+	if(SIGNVERIF(Bob_gblongterm, Bob_gbssig, Bob_gbs) = true) then (
+		event RecvPpkey(Bob_gblongterm, Bob_gbs, Bob_gbs_auth);
+        let (Alice_galongterm:ppkey) = exp(const_alongterm, const_g) in
+        let (Alice_gae0:ppkey) = exp(const_ae0, const_g) in 
+        let (Alice_gae1:ppkey) = exp(const_ae1, const_g) in 
+        let (Alice_a3xdh:bitstring) = CONCAT4(exp(const_alongterm, Bob_gbs), exp(const_ae0, Bob_gblongterm), exp(const_ae0, Bob_gbs), exp(const_ae0, Bob_gbo)) in 
+		let (Alice_aroot0:bitstring, Alice_achain0:bitstring) = HKDF(const_nil, Alice_a3xdh, const_whispertext) in 
+		let (Alice_ashared1:ppkey) = exp(const_ae1, Bob_gbs) in 
+		let (Alice_aroot1:bitstring, Alice_achain1:bitstring) = HKDF(Alice_aroot0, PPKEY2BITSTRING(Alice_ashared1), const_whisperratchet) in 
+		let (Alice_akenc1:bitstring, Alice_akenc2:bitstring) = HKDF(const_nil, MAC(Alice_achain1, const_message_key_seed), const_whispermessagekeys) in 
+		let (Alice_e1:bitstring) = AEAD_ENC(Alice_akenc1, const_ak1, CONCAT2(PPKEY2BITSTRING(Alice_galongterm), PPKEY2BITSTRING(Bob_gblongterm))) in 
+		let (Alice_bob_name_enc1:bitstring) = AEAD_ENC(const_ak1, const_bob_name, const_ad) in 
+        event SendPpkey(Bob_gbo, Alice_gae0, Alice_gae0_auth);
+        event SendPpkey(Bob_gbo, Alice_gae1, Alice_gae1_auth);
+        event SendBitstring(Bob_gbo, Alice_e1, Alice_e1_auth);
+        out(pub, Alice_galongterm);
+        out(chan_Alice_to_Bob, Alice_gae0);
+		out(chan_Alice_to_Bob, Alice_gae1);
+		out(chan_Alice_to_Bob, Alice_e1);
+		in(chan_Bob_to_Alice, Bob_gbe1:ppkey);
+		in(chan_Bob_to_Alice, Bob_e2:bitstring);
+		let (Alice_ashared2:ppkey) = exp(const_ae1, Bob_gbe1) in 
+		let (Alice_aroot2:bitstring, Alice_achain2:bitstring) = HKDF(Alice_aroot1, PPKEY2BITSTRING(Alice_ashared2), const_whisperratchet) in 
+		let (Alice_akenc3:bitstring, Alice_akenc4:bitstring) = HKDF(const_nil, MAC(Alice_achain2, const_message_key_seed), const_whispermessagekeys) in 
+		if (AEAD_DEC_check(Alice_akenc3, Bob_e2, CONCAT2(PPKEY2BITSTRING(Alice_galongterm), PPKEY2BITSTRING(Bob_gblongterm))) = true) then (
+			event RecvPpkey(Bob_gbo, Bob_gbe1, Bob_gbe1_auth);
+			event RecvBitstring(Bob_gbo, Bob_e2, Bob_e2_auth);
+			let (Alice_bundle_d:bitstring) = AEAD_DEC(Alice_akenc3, Bob_e2, CONCAT2(PPKEY2BITSTRING(Alice_galongterm), PPKEY2BITSTRING(Bob_gblongterm))) in 
+			let (Alice_ak1_d:bitstring, Alice_ak2:bitstring) = SPLIT2(Alice_bundle_d) in 
+			if (AEAD_DEC_check(Alice_ak1_d, Alice_bob_name_enc1, const_ad) = true) then (
+                let (Alice_gae2:ppkey) = exp(const_ae2, const_g) in 
+                let (Alice_ashared3:ppkey) = exp(const_ae2, Bob_gbe1) in 
+				let (Alice_aroot3:bitstring, Alice_achain3:bitstring) = HKDF(Alice_aroot2, PPKEY2BITSTRING(Alice_ashared3), const_whisperratchet) in 
+				let (Alice_akenc5:bitstring, Alice_akenc6:bitstring) = HKDF(const_nil, MAC(Alice_achain3, const_message_key_seed), const_whispermessagekeys) in 
+				let (Alice_e3:bitstring) = AEAD_ENC(Alice_akenc5, Alice_ak2, CONCAT2(PPKEY2BITSTRING(Alice_galongterm), PPKEY2BITSTRING(Bob_gblongterm))) in 
+                let (Alice_bob_name_dec1:bitstring) = AEAD_DEC(Alice_ak1_d, Alice_bob_name_enc1, const_ad) in 
+				let (Alice_bob_name_enc2:bitstring) = AEAD_ENC(Alice_ak2, Alice_bob_name_dec1, const_ad) in 
+                event SendPpkey(Bob_gbo, Alice_gae2, Alice_gae2_auth);
+				event SendBitstring(Bob_gbo, Alice_e3, Alice_e3_auth);
+				out(chan_Alice_to_Bob, Alice_gae2);
+                out(chan_Alice_to_Bob, Alice_e3);
+				event AliceDone();
+				leaked3(const_ae2, Alice_akenc2, Alice_akenc4, Alice_akenc6, Alice_aroot3, Alice_bob_name_enc2)
+			)
+			else event Failed()
+		)
+		else event Failed()
+	)
+	else event Failed();
+	0.
+
+let Bob() =
+	new const_bo:spkey;
+    new const_be1:spkey;
+	new const_bk2:bitstring;
+	let (Bob_gblongterm:ppkey) = exp(const_blongterm, const_g) in 
+	let (Bob_gbs:ppkey) = exp(const_bs, const_g) in 
+	let (Bob_gbo:ppkey) = exp(const_bo, const_g) in 
+	let (Bob_gbssig:sig) = SIGN(const_blongterm, Bob_gbs) in 
+	event SendPpkey(Bob_gblongterm, Bob_gbs, Bob_gbs_auth);
+	out(pub, Bob_gblongterm);
+	out(chan_Bob_to_Alice, Bob_gbs);
+	out(chan_Bob_to_Alice, Bob_gbo);
+	out(chan_Bob_to_Alice, Bob_gbssig);
+	let (Alice_galongterm:ppkey) = exp(const_alongterm, const_g) in (* A work around Signal out-of-band authentication *)
+	in(chan_Alice_to_Bob, (Alice_gae0:ppkey));
+	in(chan_Alice_to_Bob, (Alice_gae1:ppkey));
+	in(chan_Alice_to_Bob, (Alice_e1:bitstring));
+	let (Bob_b3xdh:bitstring) = CONCAT4(exp(const_bs, Alice_galongterm), exp(const_blongterm, Alice_gae0), exp(const_bs, Alice_gae0), exp(const_bo, Alice_gae0)) in 
+	let (Bob_broot0:bitstring, Bob_bchain0:bitstring) = HKDF(const_nil, Bob_b3xdh, const_whispertext) in 
+	let (Bob_bshared1:ppkey) = exp(const_bs, Alice_gae1) in 
+	let (Bob_broot1:bitstring, Bob_bchain1:bitstring) = HKDF(Bob_broot0, PPKEY2BITSTRING(Bob_bshared1), const_whisperratchet) in 
+	let (Bob_bkenc1:bitstring, Bob_bkenc2:bitstring) = HKDF(const_nil, MAC(Bob_bchain1, const_message_key_seed), const_whispermessagekeys) in 
+	if (AEAD_DEC_check(Bob_bkenc1, Alice_e1, CONCAT2(PPKEY2BITSTRING(Alice_galongterm), PPKEY2BITSTRING(Bob_gblongterm))) = true) then (
+		event RecvPpkey(Bob_gbo, Alice_gae0, Alice_gae0_auth);
+		event RecvPpkey(Bob_gbo, Alice_gae1, Alice_gae1_auth);
+		event RecvBitstring(Bob_gbo, Alice_e1, Alice_e1_auth);
+		let (Bob_bk1:bitstring) = AEAD_DEC(Bob_bkenc1, Alice_e1, CONCAT2(PPKEY2BITSTRING(Alice_galongterm), PPKEY2BITSTRING(Bob_gblongterm))) in 
+		let (Bob_gbe1:ppkey) = exp(const_be1, const_g) in 
+		let (Bob_bshared2:ppkey) = exp(const_be1, Alice_gae1) in 
+		let (Bob_broot2:bitstring, Bob_bchain2:bitstring) = HKDF(Bob_broot1, PPKEY2BITSTRING(Bob_bshared2), const_whisperratchet) in 
+		let (Bob_bkenc3:bitstring, Bob_bkenc4:bitstring) = HKDF(const_nil, MAC(Bob_bchain2, const_message_key_seed), const_whispermessagekeys) in 
+		let (Bob_bundle:bitstring) = CONCAT2(Bob_bk1, const_bk2) in 
+		let (Bob_e2:bitstring) = AEAD_ENC(Bob_bkenc3, Bob_bundle, CONCAT2(PPKEY2BITSTRING(Alice_galongterm), PPKEY2BITSTRING(Bob_gblongterm))) in 
+		event SendPpkey(Bob_gbo, Bob_gbe1, Bob_gbe1_auth);
+        event SendBitstring(Bob_gbo, Bob_e2, Bob_e2_auth);
+		out(chan_Bob_to_Alice, Bob_gbe1);
+		out(chan_Bob_to_Alice, Bob_e2);
+		in(chan_Alice_to_Bob, Alice_gae2:ppkey);
+		in(chan_Alice_to_Bob, Alice_e3:bitstring);
+		let (Bob_bshared3:ppkey) = exp(const_be1, Alice_gae2) in 
+		let (Bob_broot3:bitstring, Bob_bchain3:bitstring) = HKDF(Bob_broot2, PPKEY2BITSTRING(Bob_bshared3), const_whisperratchet) in 
+		let (Bob_bkenc5:bitstring, Bob_bkenc6:bitstring) = HKDF(const_nil, MAC(Bob_bchain3, const_message_key_seed), const_whispermessagekeys) in 
+		if (AEAD_DEC_check(Bob_bkenc5, Alice_e3, CONCAT2(PPKEY2BITSTRING(Alice_galongterm), PPKEY2BITSTRING(Bob_gblongterm))) = true) then (
+			event RecvPpkey(Bob_gbo, Alice_gae2, Alice_gae2_auth);
+			event RecvBitstring(Bob_gbo, Alice_e3, Alice_e3_auth);
+			let (Bob_bk2_d:bitstring) = AEAD_DEC(Bob_bkenc5, Alice_e3, CONCAT2(PPKEY2BITSTRING(Alice_galongterm), PPKEY2BITSTRING(Bob_gblongterm))) in event BobDone()
+		)
+		else event Failed()
+	)
+	else event Failed();
+	0.
+
+process 
+	((!Alice()) | (!Bob()))
